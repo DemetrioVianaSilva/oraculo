@@ -84,7 +84,7 @@
 
   <script>
     /* ---------- helpers ---------- */
-    const \$ = (sel) => document.querySelector(sel);
+    const $ = (sel) => document.querySelector(sel);
     const show = (id) => document.getElementById(id).classList.remove("hidden");
     const hide = (id) => document.getElementById(id).classList.add("hidden");
 
@@ -96,24 +96,52 @@
         .toUpperCase();
     }
 
-    /** Regex simples para CNH/RG (ajuste conforme padrões locais) */
+    /* ---------- PARSERS ---------- */
+
+    /** Heurística para identificar a linha de nome: 3‑4 palavras, todas letras, sem palavras‑chave genéricas */
+    function extractName(lines) {
+      const blacklist = [
+        "REPUBLICA", "FEDERATIVA", "BRASIL", "SECRETARIA", "NACIONAL", "TRANSITO", "SENATRAN", "ASSINADO", "DIGITAL", "CERTIFICADO", "VALIDADE", "DOCUMENTO"
+      ];
+      for (const line of lines) {
+        const clean = line.trim();
+        if (clean.split(" ").length < 3 || clean.split(" ").length > 4) continue;
+        if (blacklist.some((w) => clean.includes(w))) continue;
+        if (/^[A-Z ]+$/.test(clean)) return clean; // só letras e espaços
+      }
+      return "";
+    }
+
     function parseIdText(raw) {
       const txt = normalizeText(raw);
+      const lines = txt.split(/\n|\r/).filter(Boolean);
       const result = {};
-      // Nome = maior sequência de letras
-      const maybeNames = txt.match(/[A-Z ]{10,}/g) || [];
-      result.nome = maybeNames.sort((a, b) => b.length - a.length)[0]?.trim() || "";
-      // Data nascimento (DD/MM/AAAA)
-      result.dob = (txt.match(/([0-3]?\d\/[01]?\d\/[12]\d{3})/) || [])[1] || "";
-      // CPF 11 dígitos
+
+      // Nome
+      result.nome = extractName(lines);
+
+      // Data nascimento → pegamos a data que aparece após a palavra NASC ou NASCIMENTO
+      const dobMatch = txt.match(/NASC[\w ]*?([0-3]?\d\/[01]?\d\/[12]\d{3})/);
+      result.dob = dobMatch ? dobMatch[1] : "";
+
+      // CPF
       result.cpf = (txt.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/) || [])[0] || "";
+
+      // Naturalidade
+      const natLine = lines.find((l) => l.includes("NATURAL") || l.includes("NATUR"));
+      result.naturalidade = natLine ? natLine.replace(/[^A-Z ]/g, "").replace(/NATURALIDADE|NATURAL|NATUR/g, "").trim() : "";
+
+      // Nome da mãe (CNH tem "FILIACAO"; pegamos a parte depois do termo)
+      const momMatch = txt.match(/FILIA[\w ]+?MAE[: ]+([A-Z ]{5,})/);
+      result.mae = momMatch ? momMatch[1].trim() : "";
+
       return result;
     }
 
-    /** Regex super‑simples para endereço (pode melhorar depois) */
+    /** Regex simples para endereço */
     function parseAddressText(raw) {
       const txt = normalizeText(raw);
-      const line = txt.split(/\n|\r/).find((l) => l.includes("RUA") || l.includes("AV") || l.includes("TRAV")) || "";
+      const line = txt.split(/\n|\r/).find((l) => /(RUA|AV|TRAV|ALAMEDA|ROD)/.test(l)) || "";
       return { endereco: line.trim() };
     }
 
@@ -130,11 +158,11 @@
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         await page.render({ canvasContext: ctx, viewport }).promise;
-        const { data: { text } } = await Tesseract.recognize(canvas, "por");
+        const { data: { text } } = await Tesseract.recognize(canvas, "por", { logger: (m) => console.log(m) });
         return text;
       }
       // Imagem comum
-      const { data: { text } } = await Tesseract.recognize(file, "por");
+      const { data: { text } } = await Tesseract.recognize(file, "por", { logger: (m) => console.log(m) });
       return text;
     }
 

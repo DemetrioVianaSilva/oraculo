@@ -1,0 +1,12 @@
+*{box-sizing:border-box;font-family:-apple-system,Helvetica,Arial,sans-serif}
+body{margin:0;padding:1rem;background:#f4f6fa;color:#111;text-align:center}
+header{display:flex;justify-content:center;font-weight:700;margin-bottom:1rem}
+section{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:.75rem}
+.hidden{display:none}
+button{padding:.75rem;border:none;border-radius:6px;background:#0d2d55;color:#fff;font-size:1rem;cursor:pointer}
+label{display:flex;flex-direction:column;align-items:flex-start;font-size:.9rem;gap:.25rem}
+input[type="file"]{padding:.5rem 0}
+form input{width:100%;padding:.5rem;border:1px solid #ccc;border-radius:4px}
+.file-input{align-items:center;border:1px dashed #789;padding:.75rem;border-radius:6px;background:#fff}
+.spinner{width:48px;height:48px;border:5px solid #d7e0ec;border-top-color:#0d2d55;border-radius:50%;margin:1rem auto;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}

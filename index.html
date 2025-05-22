@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Pré‑cadastro Inteligente</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://unpkg.com/tesseract.js@v5.0.0/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+</head>
+<body>
+    <header><h1>MB</h1></header>
+
+    <!-- Step 1 -->
+    <section id="step1">
+        <h2>Pré‑cadastro Inteligente</h2>
+        <p>Escaneie seu documento de Identidade (RG ou CNH) e seu comprovante de residência</p>
+
+        <label class="file-input">
+            <span>Documento de identidade</span>
+            <input type="file" id="idFile" accept="application/pdf,image/*" capture="environment" />
+        </label>
+
+        <label class="file-input">
+            <span>Comprovante de residência</span>
+            <input type="file" id="addressFile" accept="application/pdf,image/*" capture="environment" />
+        </label>
+
+        <button id="scanBtn">Escanear Documentos</button>
+    </section>
+
+    <!-- Step 2 -->
+    <section id="step2" class="hidden">
+        <h2>Analisando…</h2>
+        <div class="spinner"></div>
+        <p>Aguarde um momento enquanto os seus dados são extraídos</p>
+    </section>
+
+    <!-- Step 3 -->
+    <section id="step3" class="hidden">
+        <h2>Confirme seus Dados</h2>
+        <form id="identityForm">
+            <label>Nome <input name="nome" /></label>
+            <label>Data de Nascimento <input name="dob" /></label>
+            <label>CPF <input name="cpf" /></label>
+            <label>Naturalidade <input name="naturalidade" /></label>
+            <label>Nome da Mãe <input name="mae" /></label>
+        </form>
+        <button id="nextToAddress">Próximo</button>
+
+        <details>
+          <summary>Texto bruto OCR‬ (debug)</summary>
+          <pre id="rawTextId" style="white-space:pre-wrap;"></pre>
+        </details>
+    </section>
+
+    <!-- Step 4 -->
+    <section id="step4" class="hidden">
+        <h2>Dados Residenciais</h2>
+        <form id="addressForm">
+            <label>Endereço <input name="endereco" /></label>
+        </form>
+        <button id="sendBtn">Enviar Contrato</button>
+
+        <details>
+          <summary>Texto bruto OCR (endereço)</summary>
+          <pre id="rawTextAddr" style="white-space:pre-wrap;"></pre>
+        </details>
+    </section>
+
+    <!-- Step 5 -->
+    <section id="step5" class="hidden">
+        <h2>✅ Pré‑cadastro concluído!</h2>
+        <p>Obrigado. Você receberá o contrato por SMS.</p>
+    </section>
+
+    <script src="script.js"></script>
+</body>
+</html>

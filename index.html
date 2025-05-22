@@ -4,21 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Pré-cadastro Inteligente</title>
-  <!-- Tailwind for quick styling (ok for prototype) -->
+  <!-- Favicon inline para evitar erro 404  -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%234f46e5'/><text x='8' y='12' font-size='9' fill='white' text-anchor='middle' font-family='Arial'>MB</text></svg>">
+
+  <!-- Tailwind (somente para protótipo) -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- OCR & PDF libraries -->
+  <!-- OCR & PDF libs -->
   <script src="https://unpkg.com/tesseract.js@v5.0.0/dist/tesseract.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
-    // Worker path required by pdf.js v3
     pdfjsLib.GlobalWorkerOptions.workerSrc =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   </script>
   <style>
-    /* tiny fix for text inputs */
-    input.input {
-      @apply w-full border rounded px-2 py-1 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500;
-    }
+    input.input { @apply w-full border rounded px-2 py-1 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500; }
   </style>
 </head>
 <body class="bg-slate-50 text-gray-800 min-h-screen flex flex-col items-center p-4">
@@ -91,92 +90,69 @@
   <script>
     // ---------- helpers ----------
     const $ = (sel) => document.querySelector(sel);
-    const show = (id) => document.getElementById(id).classList.remove("hidden");
-    const hide = (id) => document.getElementById(id).classList.add("hidden");
+    const show = (id) => document.getElementById(id).classList.remove('hidden');
+    const hide = (id) => document.getElementById(id).classList.add('hidden');
 
-    const normalizeText = (raw) => raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    const normalizeText = (raw) => raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
 
     // ---------- PARSERS ----------
+    const blacklist = [
+      'REPUBLICA','FEDERATIVA','BRASIL','SECRETARIA','NACIONAL','TRANSITO','SENATRAN','ASSINADO','DIGITAL','CERTIFICADO','VALIDADE','DOCUMENTO','DENATRAN','CONTRAN','CE'
+    ];
+
     function extractName(lines) {
-      const blacklist = [
-        "REPUBLICA","FEDERATIVA","BRASIL","SECRETARIA","NACIONAL","TRANSITO","SENATRAN","ASSINADO","DIGITAL","CERTIFICADO","VALIDADE","DOCUMENTO"
-      ];
-      for (let line of lines) {
-        line = line.trim();
-        const words = line.split(" ");
-        if (words.length < 2 || words.length > 5) continue;
-        if (blacklist.some((w) => line.includes(w))) continue;
-        if (/^[A-Z ]+$/.test(line)) return line;
-      }
-      return "";
+      return lines.find(l => {
+        const line = l.trim();
+        const words = line.split(' ');
+        return words.length >= 2 && words.length <= 5 &&
+               /^[A-Z ]+$/.test(line) &&
+               !blacklist.some(w => line.includes(w));
+      }) || '';
     }
 
     function parseIdText(raw) {
       const txt = normalizeText(raw);
       const lines = txt.split(/\r?\n/).filter(Boolean);
-      const out = {};
+      const data = {};
 
-      out.nome = extractName(lines);
-      out.dob = (txt.match(/NASC[^\d]*(\d{2}\/\d{2}\/\d{4})/) || [])[1] || "";
-      out.cpf = (txt.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/) || [])[0] || "";
-      const natLine = lines.find(l => l.includes("NATUR")) || "";
-      out.naturalidade = natLine.replace(/NATURALIDADE|NATURAL|NATUR|[^A-Z ]/g, "").trim();
+      data.nome = extractName(lines);
+      data.dob = (txt.match(/NASC[^\d]*(\d{2}\/\d{2}\/\d{4})/) || [])[1] || '';
+      data.cpf = (txt.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/) || [])[0] || '';
+      const natLine = lines.find(l => l.includes('NATUR')) || '';
+      data.naturalidade = natLine.replace(/NATURALIDADE|NATURAL|NATUR|[^A-Z ]/g, '').trim();
       const mom = txt.match(/MAE[:\s]+([A-Z ]{5,})/);
-      out.mae = mom ? mom[1].trim() : "";
+      data.mae = mom ? mom[1].trim() : '';
 
-      return out;
+      return data;
     }
 
-    const parseAddressText = (raw) => {
+    const parseAddressText = raw => {
       const txt = normalizeText(raw);
       const line = txt.split(/\r?\n/).find(l => /(RUA|AV|TRAV|ALAMEDA|ROD)/.test(l));
-      return { endereco: line ? line.trim() : "" };
+      return { endereco: line ? line.trim() : '' };
     };
 
     // ---------- OCR helper ----------
     async function ocrFile(file) {
-      if (file.type === "application/pdf") {
+      if (file.type === 'application/pdf') {
         const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
         const page = await pdf.getPage(1);
         const viewport = page.getViewport({ scale: 2 });
-        const canvas = document.createElement("canvas");
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
-        return (await Tesseract.recognize(canvas, "por")).data.text;
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const { data: { text } } = await Tesseract.recognize(canvas, 'por');
+        return text;
       }
-      return (await Tesseract.recognize(file, "por")).data.text;
+      const { data: { text } } = await Tesseract.recognize(file, 'por');
+      return text;
     }
 
     // ---------- flow ----------
-    $("#scanBtn").addEventListener("click", async () => {
-      const idFile = $("#idFile").files[0];
-      const addrFile = $("#addressFile").files[0];
-      if (!idFile || !addrFile) return alert("Selecione ambos os arquivos antes de continuar.");
+    $('#scanBtn').addEventListener('click', async () => {
+      const idFile = $('#idFile').files[0];
+      const addrFile = $('#addressFile').files[
 
-      hide("step1"); show("step2");
-      try {
-        const idText = await ocrFile(idFile);
-        $("#rawTextId").textContent = idText;
-        const idData = parseIdText(idText);
-        Object.entries(idData).forEach(([k,v]) => v && ($("#identityForm").elements[k].value = v));
-
-        const addrText = await ocrFile(addrFile);
-        $("#rawTextAddr").textContent = addrText;
-        const addrData = parseAddressText(addrText);
-        addrData.endereco && ($("#addressForm").elements.endereco.value = addrData.endereco);
-
-        hide("step2"); show("step3");
-      } catch (e) {
-        console.error(e);
-        alert("Erro no processamento OCR. Veja o console para detalhes.");
-        hide("step2"); show("step1");
-      }
-    });
-
-    $("#nextToAddress").addEventListener("click", () => { hide("step3"); show("step4"); });
-    $("#sendBtn").addEventListener("click", () => { hide("step4"); show("step5"); });
-  </script>
-</body>
-</html>
 

@@ -2,181 +2,188 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pré‑cadastro Inteligente</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cadastro Automático via OCR</title>
+  <style>
+    * { box-sizing: border-box; font-family: Arial, Helvetica, sans-serif; }
+    body { margin: 0; padding: 1rem; display: grid; gap: 1rem; background: #f4f4f8; }
+    header { font-size: 1.4rem; font-weight: 700; }
+    #controles { display: flex; gap: 0.5rem; align-items: center; }
+    #status { font-size: 0.85rem; color: #555; }
 
-  <!-- Favicon para evitar erro 404 -->
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%234f46e5'/%3E%3Ctext x='8' y='12' font-size='9' fill='white' text-anchor='middle' font-family='Arial'%3EMP%3C/text%3E%3C/svg%3E">
+    /* layout */
+    #grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    #grid img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; }
 
-  <!-- Tailwind CDN (ok para protótipo) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- libs OCR / PDF -->
-  <script src="https://unpkg.com/tesseract.js@v5.0.0/dist/tesseract.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script>
-    // caminho do worker obrigatório p/ pdf.js v3
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  </script>
+    /* formulário */
+    form { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; background: #fff; padding: 1rem; border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+    label { display: flex; flex-direction: column; font-size: 0.85rem; color: #333; }
+    input, select { padding: 0.4rem 0.6rem; border: 1px solid #bbb; border-radius: 4px; font-size: 0.9rem; }
+    input:invalid { border-color: #f55; }
+    button { padding: 0.5rem 1rem; border: none; border-radius: 4px; background: #0066cc; color: #fff; font-weight: 600; cursor: pointer; }
+    button:disabled { background: #888; }
+  </style>
 </head>
-<body class="bg-slate-50 text-gray-800 min-h-screen flex flex-col items-center p-4">
-  <header class="w-full max-w-2xl mb-6">
-    <h1 class="text-2xl font-extrabold text-center">Pré‑cadastro Inteligente</h1>
-  </header>
+<body>
+  <header>Leitor de CNH / Comprovante – Preenchimento Automático</header>
 
-  <!-- PASSO 1 -->
-  <section id="step1" class="w-full max-w-2xl space-y-4">
-    <p class="text-sm text-gray-600">Escaneie seu documento de Identidade (RG ou CNH) e seu comprovante de residência</p>
+  <!-- Controles principais -->
+  <div id="controles">
+    <input type="file" id="file" accept="image/*" />
+    <button id="scan">Escanear</button>
+    <span id="status"></span>
+  </div>
 
-    <label class="block p-4 border rounded-lg bg-white shadow-sm cursor-pointer hover:bg-slate-100">
-      <span class="block text-sm font-medium mb-1">Documento de identidade</span>
-      <input type="file" id="idFile" accept="application/pdf,image/*" capture="environment" class="w-full" />
-    </label>
+  <div id="grid">
+    <!-- Preview da imagem -->
+    <div>
+      <img id="preview" alt="preview" />
+    </div>
 
-    <label class="block p-4 border rounded-lg bg-white shadow-sm cursor-pointer hover:bg-slate-100">
-      <span class="block text-sm font-medium mb-1">Comprovante de residência</span>
-      <input type="file" id="addressFile" accept="application/pdf,image/*" capture="environment" class="w-full" />
-    </label>
-
-    <button id="scanBtn" class="w-full py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors">Escanear Documentos</button>
-  </section>
-
-  <!-- PASSO 2 -->
-  <section id="step2" class="w-full max-w-2xl hidden flex flex-col items-center space-y-4">
-    <h2 class="text-xl font-semibold">Analisando…</h2>
-    <div class="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div>
-    <p class="text-sm text-gray-600">Aguarde um momento enquanto os seus dados são extraídos</p>
-  </section>
-
-  <!-- PASSO 3 -->
-  <section id="step3" class="w-full max-w-2xl hidden space-y-4">
-    <h2 class="text-xl font-semibold">Confirme seus Dados</h2>
-    <form id="identityForm" class="space-y-2">
-      <label class="block">Nome <input name="nome" class="w-full border rounded px-2 py-1" /></label>
-      <label class="block">Data de Nascimento <input name="dob" class="w-full border rounded px-2 py-1" /></label>
-      <label class="block">CPF <input name="cpf" class="w-full border rounded px-2 py-1" /></label>
-      <label class="block">Naturalidade <input name="naturalidade" class="w-full border rounded px-2 py-1" /></label>
-      <label class="block">Nome da Mãe <input name="mae" class="w-full border rounded px-2 py-1" /></label>
+    <!-- Formulário de cadastro -->
+    <form id="cadastro" autocomplete="off">
+      <label>Nome
+        <input id="campo_nome" required />
+      </label>
+      <label>Data de Nascimento
+        <input id="campo_nascimento" type="date" />
+      </label>
+      <label>Nº CNH / Registro
+        <input id="campo_num_cnh" />
+      </label>
+      <label>Data de Emissão
+        <input id="campo_emissao" type="date" />
+      </label>
+      <label>Validade
+        <input id="campo_validade" type="date" />
+      </label>
+      <label>UF
+        <select id="campo_uf">
+          <option value="">--</option>
+          <option>ACRE</option><option>ALAGOAS</option><option>AMAPÁ</option><option>AMAZONAS</option>
+          <option>BAHIA</option><option>CEARÁ</option><option>DISTRITO FEDERAL</option><option>ESPÍRITO SANTO</option>
+          <option>GOIÁS</option><option>MARANHÃO</option><option>MATO GROSSO</option><option>MATO GROSSO DO SUL</option>
+          <option>MINAS GERAIS</option><option>PARÁ</option><option>PARAÍBA</option><option>PARANÁ</option>
+          <option>PERNAMBUCO</option><option>PIAUÍ</option><option>RIO DE JANEIRO</option><option>RIO GRANDE DO NORTE</option>
+          <option>RIO GRANDE DO SUL</option><option>RONDÔNIA</option><option>RORAIMA</option><option>SANTA CATARINA</option>
+          <option>SÃO PAULO</option><option>SERGIPE</option><option>TOCANTINS</option>
+        </select>
+      </label>
+      <label>Cidade
+        <input id="campo_cidade" />
+      </label>
+      <label>Nome do Pai
+        <input id="campo_pai" />
+      </label>
+      <label>Nome da Mãe
+        <input id="campo_mae" />
+      </label>
     </form>
-    <button id="nextToAddress" class="w-full py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors">Próximo</button>
+  </div>
 
-    <details class="mt-2">
-      <summary class="cursor-pointer text-indigo-700">Texto bruto OCR (debug)</summary>
-      <pre id="rawTextId" class="whitespace-pre-wrap text-sm bg-slate-100 p-2 rounded"></pre>
-    </details>
-  </section>
-
-  <!-- PASSO 4 -->
-  <section id="step4" class="w-full max-w-2xl hidden space-y-4">
-    <h2 class="text-xl font-semibold">Dados Residenciais</h2>
-    <form id="addressForm" class="space-y-2">
-      <label class="block">Endereço completo <input name="endereco" class="w-full border rounded px-2 py-1" /></label>
-    </form>
-    <button id="sendBtn" class="w-full py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors">Enviar Contrato</button>
-
-    <details class="mt-2">
-      <summary class="cursor-pointer text-indigo-700">Texto bruto OCR (endereço)</summary>
-      <pre id="rawTextAddr" class="whitespace-pre-wrap text-sm bg-slate-100 p-2 rounded"></pre>
-    </details>
-  </section>
-
-  <!-- PASSO 5 -->
-  <section id="step5" class="w-full max-w-2xl hidden text-center space-y-4">
-    <h2 class="text-xl font-semibold">Pré‑cadastro concluído!</h2>
-    <p class="text-gray-700">Obrigado. Você receberá o contrato por SMS.</p>
-  </section>
+  <!-- Tesseract.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.3/dist/tesseract.min.js"></script>
 
   <script>
-    //--------- UTIL -------------
-    const $ = (sel) => document.querySelector(sel);
-    const show = (id) => document.getElementById(id).classList.remove('hidden');
-    const hide = (id) => document.getElementById(id).classList.add('hidden');
-    const normalize = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    const fileInput   = document.getElementById('file');
+    const scanBtn     = document.getElementById('scan');
+    const statusTxt   = document.getElementById('status');
+    const previewImg  = document.getElementById('preview');
 
-    //--------- PARSERS -------------
-    const blacklist = ['REPUBLICA','FEDERATIVA','BRASIL','SECRETARIA','NACIONAL','TRANSITO','SENATRAN','ASSINADO','DIGITAL','CERTIFICADO','VALIDADE','DOCUMENTO','DENATRAN','CONTRAN'];
+    // Mapeia as chaves retornadas pelo parser aos IDs dos campos
+    const mapping = {
+      nome:          'campo_nome',
+      data_nasc:     'campo_nascimento',
+      registro:      'campo_num_cnh',
+      data_emissao:  'campo_emissao',
+      validade:      'campo_validade',
+      uf:            'campo_uf',
+      cidade:        'campo_cidade',
+      pai:           'campo_pai',
+      mae:           'campo_mae'
+    };
 
-    function parseIdentity(raw) {
-      const text = normalize(raw);
-      const lines = text.split(/\r?\n/).filter(Boolean);
-      const data = { nome:'', dob:'', cpf:'', naturalidade:'', mae:'' };
+    scanBtn.addEventListener('click', async () => {
+      const file = fileInput.files[0];
+      if (!file) return alert('Selecione uma imagem da CNH ou comprovante.');
 
-      // nome: primeira linha elegível (2‑5 palavras, só letras)
-      data.nome = lines.find(l => {
-        const w = l.trim().split(' ');
-        return w.length>=2 && w.length<=5 && /^[A-Z ]+$/.test(l) && !blacklist.some(b=>l.includes(b));
-      }) || '';
+      // Preview
+      const imgURL = URL.createObjectURL(file);
+      previewImg.src = imgURL;
 
-      // data nascimento após NASC
-      data.dob = (text.match(/NASC[^\d]*(\d{2}\/\d{2}\/\d{4})/)||[])[1]||'';
+      // Limpa status
+      statusTxt.textContent = 'Executando OCR… (pode levar alguns segundos)';
+      scanBtn.disabled = true;
 
-      // cpf
-      data.cpf = (text.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/)||[])[0]||'';
+      try {
+        // Executa OCR em português
+        const { data: { text } } = await Tesseract.recognize(imgURL, 'por', {
+          logger: m => console.log(m) // remove depois se preferir
+        });
 
-      // naturalidade
-      const nat = lines.find(l=>/NATUR/.test(l))||'';
-      data.naturalidade = nat.replace(/NATURALIDADE|NATURAL|NATUR|[^A-Z ]/g,'').trim();
+        const dados = parseCNH(text);
+        preencherFormulario(dados);
 
-      // mãe
-      const mom = text.match(/MAE[:\s]+([A-Z ]{5,})/);
-      data.mae = mom ? mom[1].trim() : '';
-
-      return data;
-    }
-
-    function parseAddress(raw){
-      const txt = normalize(raw);
-      const l = txt.split(/\r?\n/).find(x=>/(RUA|AV|TRAV|ALAMEDA|ROD)/.test(x));
-      return {endereco:l?l.trim():''};
-    }
-
-    //--------- OCR FILE -------------
-    async function ocrFile(file){
-      if(file.type==='application/pdf'){
-        const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
-        const page=await pdf.getPage(1);
-        const canvas=document.createElement('canvas');
-        const ctx=canvas.getContext('2d');
-        const vp=page.getViewport({scale:2});
-        canvas.width=vp.width; canvas.height=vp.height;
-        await page.render({canvasContext:ctx,viewport:vp}).promise;
-        const {data:{text}}=await Tesseract.recognize(canvas,'por',{logger:m=>console.log(m.status)});
-        return text;
-      }else{
-        const {data:{text}}=await Tesseract.recognize(file,'por',{logger:m=>console.log(m.status)});
-        return text;
-      }
-    }
-
-    //--------- FLOW -------------
-    $('#scanBtn').addEventListener('click', async ()=>{
-      const idFile=$('#idFile').files[0];
-      const addrFile=$('#addressFile').files[0];
-      if(!idFile||!addrFile){alert('Selecione ambos os arquivos');return;}
-      hide('step1'); show('step2');
-      try{
-        const idText=await ocrFile(idFile);
-        $('#rawTextId').textContent=idText;
-        const idData=parseIdentity(idText);
-        Object.entries(idData).forEach(([k,v])=> v && ($('#identityForm').elements[k].value=v));
-
-        const addrText=await ocrFile(addrFile);
-        $('#rawTextAddr').textContent=addrText;
-        const addrData=parseAddress(addrText);
-        if(addrData.endereco){ $('#addressForm').elements.endereco.value=addrData.endereco; }
-
-        hide('step2'); show('step3');
-      }catch(e){
-        console.error(e);
-        alert('Erro na leitura OCR');
-        hide('step2'); show('step1');
+        statusTxt.textContent = 'Pronto! Revise e salve.';
+      } catch (err) {
+        console.error(err);
+        statusTxt.textContent = 'Erro ao processar OCR.';
+      } finally {
+        scanBtn.disabled = false;
       }
     });
 
-    $('#nextToAddress').addEventListener('click',()=>{ hide('step3'); show('step4'); });
-    $('#sendBtn').addEventListener('click',()=>{ hide('step4'); show('step5'); });
+    // -------------------------------------
+    // Parser simplificado para CNH brasileira
+    // -------------------------------------
+    function parseCNH(raw) {
+      const t = raw.replace(/\s+/g, ' ').toUpperCase();
+      const out = {};
+
+      // Nome
+      out.nome = (t.match(/NOME ([A-ZÁÉÍÓÚÃÕÇ ]{5,})/) || [])[1]?.trim();
+
+      // Datas (NASCIMENTO, EMISSÃO, VALIDADE)
+      out.data_nasc = (t.match(/NASCIMENTO (\d{2}\/\d{2}\/\d{4})/) || [])[1];
+      out.data_emissao = (t.match(/DATA EMISS[AÃ]O (\d{2}\/\d{2}\/\d{4})/) || [])[1];
+      out.validade = (t.match(/VALIDADE (\d{2}\/\d{2}\/\d{4})/) || [])[1];
+
+      // Registro / Nº CNH
+      out.registro = (t.match(/N[\u00BAº] REGISTRO (\d{4,})/) || [])[1];
+
+      // UF e cidade (puxa última palavra em CAPS como fallback)
+      out.uf = (t.match(/(ACRE|ALAGOAS|AMAP[AÁ]|AMAZONAS|BAHIA|CEAR[AÁ]|DISTRITO FEDERAL|ESP[IÍ]RITO SANTO|GO[IÁ]S|MARANH[AÃ]O|MATO GROSSO DO SUL|MATO GROSSO|MINAS GERAIS|PAR[AÁ]|PARA[ÍI]BA|PARAN[AÁ]|PERNAMBUCO|PIAU[ÍI]|RIO DE JANEIRO|RIO GRANDE DO NORTE|RIO GRANDE DO SUL|ROND[ÔO]NIA|RORAIMA|SANTA CATARINA|S[ÃA]O PAULO|SERGIPE|TOCANTINS)/) || [])[1];
+
+      // Filiação (Pai/Mãe) – capturar blocos depois da palavra FILIACAO ou FILIAC
+      const filia = t.match(/FILIA[ÇC]AO ([A-Z ]+) ([A-Z ]+)/);
+      if (filia) {
+        out.pai = filia[1].trim();
+        out.mae = filia[2].trim();
+      }
+
+      // Cidade – pega palavra anterior a UF se aparecer "-" ou linha onde aparece "LOCAL"
+      out.cidade = (t.match(/LOCAL ([A-Z ]+) (?:-|\u2013) ?/ )||[])[1];
+
+      return out;
+    }
+
+    function preencherFormulario(dados) {
+      Object.entries(mapping).forEach(([k, id]) => {
+        const el = document.getElementById(id);
+        if (dados[k] && el) {
+          // Converte data DD/MM/YYYY para YYYY-MM-DD se campo type=date
+          if (el.type === 'date' && /\d{2}\/\d{2}\/\d{4}/.test(dados[k])) {
+            const [d, m, y] = dados[k].split('/');
+            el.value = `${y}-${m}-${d}`;
+          } else {
+            el.value = dados[k];
+          }
+        }
+      });
+    }
   </script>
 </body>
 </html>
+
 

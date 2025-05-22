@@ -3,24 +3,30 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Pré‑cadastro Inteligente</title>
-  <!-- Tailwind para layout rápido -->
+  <title>Pré-cadastro Inteligente</title>
+  <!-- Tailwind for quick styling (ok for prototype) -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- OCR & PDF libs -->
+  <!-- OCR & PDF libraries -->
   <script src="https://unpkg.com/tesseract.js@v5.0.0/dist/tesseract.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
-    // Configura o worker do pdf.js (obrigatório a partir da v3)
+    // Worker path required by pdf.js v3
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   </script>
+  <style>
+    /* tiny fix for text inputs */
+    input.input {
+      @apply w-full border rounded px-2 py-1 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500;
+    }
+  </style>
 </head>
 <body class="bg-slate-50 text-gray-800 min-h-screen flex flex-col items-center p-4">
   <header class="w-full max-w-2xl mb-6">
-    <h1 class="text-2xl font-extrabold text-center">Pré‑cadastro Inteligente</h1>
+    <h1 class="text-2xl font-extrabold text-center">Pré-cadastro Inteligente</h1>
   </header>
 
-  <!-- Passo 1 -->
+  <!-- Step 1 -->
   <section id="step1" class="w-full max-w-2xl space-y-4">
     <p class="text-sm text-gray-600">Escaneie seu documento de Identidade (RG ou CNH) e seu comprovante de residência</p>
 
@@ -37,22 +43,22 @@
     <button id="scanBtn" class="w-full py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors">Escanear Documentos</button>
   </section>
 
-  <!-- Passo 2 -->
+  <!-- Step 2 -->
   <section id="step2" class="w-full max-w-2xl hidden flex-col items-center space-y-4">
     <h2 class="text-xl font-semibold">Analisando…</h2>
     <div class="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent"></div>
     <p class="text-sm text-gray-600">Aguarde um momento enquanto os seus dados são extraídos</p>
   </section>
 
-  <!-- Passo 3 -->
+  <!-- Step 3 -->
   <section id="step3" class="w-full max-w-2xl hidden space-y-4">
     <h2 class="text-xl font-semibold">Confirme seus Dados</h2>
     <form id="identityForm" class="space-y-2">
-      <label class="block">Nome <input name="nome" class="input"></label>
-      <label class="block">Data de Nascimento <input name="dob" class="input"></label>
-      <label class="block">CPF <input name="cpf" class="input"></label>
-      <label class="block">Naturalidade <input name="naturalidade" class="input"></label>
-      <label class="block">Nome da Mãe <input name="mae" class="input"></label>
+      <label class="block">Nome <input name="nome" class="input" /></label>
+      <label class="block">Data de Nascimento <input name="dob" class="input" /></label>
+      <label class="block">CPF <input name="cpf" class="input" /></label>
+      <label class="block">Naturalidade <input name="naturalidade" class="input" /></label>
+      <label class="block">Nome da Mãe <input name="mae" class="input" /></label>
     </form>
     <button id="nextToAddress" class="w-full py-3 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700 transition-colors">Próximo</button>
 
@@ -62,7 +68,7 @@
     </details>
   </section>
 
-  <!-- Passo 4 -->
+  <!-- Step 4 -->
   <section id="step4" class="w-full max-w-2xl hidden space-y-4">
     <h2 class="text-xl font-semibold">Dados Residenciais</h2>
     <form id="addressForm" class="space-y-2">
@@ -76,134 +82,101 @@
     </details>
   </section>
 
-  <!-- Passo 5 -->
+  <!-- Step 5 -->
   <section id="step5" class="w-full max-w-2xl hidden text-center space-y-4">
-    <h2 class="text-xl font-semibold">✅ Pré‑cadastro concluído!</h2>
+    <h2 class="text-xl font-semibold">✅ Pré-cadastro concluído!</h2>
     <p class="text-gray-700">Obrigado. Você receberá o contrato por SMS.</p>
   </section>
 
   <script>
-    /* ---------- helpers ---------- */
+    // ---------- helpers ----------
     const $ = (sel) => document.querySelector(sel);
     const show = (id) => document.getElementById(id).classList.remove("hidden");
     const hide = (id) => document.getElementById(id).classList.add("hidden");
 
-    /** Remove acentos, quebra de linha duplicada etc. */
-    function normalizeText(raw) {
-      return raw
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toUpperCase();
-    }
+    const normalizeText = (raw) => raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
 
-    /* ---------- PARSERS ---------- */
-
-    /** Heurística para identificar a linha de nome: 3‑4 palavras, todas letras, sem palavras‑chave genéricas */
+    // ---------- PARSERS ----------
     function extractName(lines) {
       const blacklist = [
-        "REPUBLICA", "FEDERATIVA", "BRASIL", "SECRETARIA", "NACIONAL", "TRANSITO", "SENATRAN", "ASSINADO", "DIGITAL", "CERTIFICADO", "VALIDADE", "DOCUMENTO"
+        "REPUBLICA","FEDERATIVA","BRASIL","SECRETARIA","NACIONAL","TRANSITO","SENATRAN","ASSINADO","DIGITAL","CERTIFICADO","VALIDADE","DOCUMENTO"
       ];
-      for (const line of lines) {
-        const clean = line.trim();
-        if (clean.split(" ").length < 3 || clean.split(" ").length > 4) continue;
-        if (blacklist.some((w) => clean.includes(w))) continue;
-        if (/^[A-Z ]+$/.test(clean)) return clean; // só letras e espaços
+      for (let line of lines) {
+        line = line.trim();
+        const words = line.split(" ");
+        if (words.length < 2 || words.length > 5) continue;
+        if (blacklist.some((w) => line.includes(w))) continue;
+        if (/^[A-Z ]+$/.test(line)) return line;
       }
       return "";
     }
 
     function parseIdText(raw) {
       const txt = normalizeText(raw);
-      const lines = txt.split(/\n|\r/).filter(Boolean);
-      const result = {};
+      const lines = txt.split(/\r?\n/).filter(Boolean);
+      const out = {};
 
-      // Nome
-      result.nome = extractName(lines);
+      out.nome = extractName(lines);
+      out.dob = (txt.match(/NASC[^\d]*(\d{2}\/\d{2}\/\d{4})/) || [])[1] || "";
+      out.cpf = (txt.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/) || [])[0] || "";
+      const natLine = lines.find(l => l.includes("NATUR")) || "";
+      out.naturalidade = natLine.replace(/NATURALIDADE|NATURAL|NATUR|[^A-Z ]/g, "").trim();
+      const mom = txt.match(/MAE[:\s]+([A-Z ]{5,})/);
+      out.mae = mom ? mom[1].trim() : "";
 
-      // Data nascimento → pegamos a data que aparece após a palavra NASC ou NASCIMENTO
-      const dobMatch = txt.match(/NASC[\w ]*?([0-3]?\d\/[01]?\d\/[12]\d{3})/);
-      result.dob = dobMatch ? dobMatch[1] : "";
-
-      // CPF
-      result.cpf = (txt.match(/\b\d{3}\.\d{3}\.\d{3}-\d{2}\b|\b\d{11}\b/) || [])[0] || "";
-
-      // Naturalidade
-      const natLine = lines.find((l) => l.includes("NATURAL") || l.includes("NATUR"));
-      result.naturalidade = natLine ? natLine.replace(/[^A-Z ]/g, "").replace(/NATURALIDADE|NATURAL|NATUR/g, "").trim() : "";
-
-      // Nome da mãe (CNH tem "FILIACAO"; pegamos a parte depois do termo)
-      const momMatch = txt.match(/FILIA[\w ]+?MAE[: ]+([A-Z ]{5,})/);
-      result.mae = momMatch ? momMatch[1].trim() : "";
-
-      return result;
+      return out;
     }
 
-    /** Regex simples para endereço */
-    function parseAddressText(raw) {
+    const parseAddressText = (raw) => {
       const txt = normalizeText(raw);
-      const line = txt.split(/\n|\r/).find((l) => /(RUA|AV|TRAV|ALAMEDA|ROD)/.test(l)) || "";
-      return { endereco: line.trim() };
-    }
+      const line = txt.split(/\r?\n/).find(l => /(RUA|AV|TRAV|ALAMEDA|ROD)/.test(l));
+      return { endereco: line ? line.trim() : "" };
+    };
 
-    /* ---------- OCR pipeline ---------- */
+    // ---------- OCR helper ----------
     async function ocrFile(file) {
-      // Se for PDF ➜ converte primeira página em canvas imagem
       if (file.type === "application/pdf") {
-        const data = new Uint8Array(await file.arrayBuffer());
-        const pdf = await pdfjsLib.getDocument({ data }).promise;
+        const pdf = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
         const page = await pdf.getPage(1);
         const viewport = page.getViewport({ scale: 2 });
         const canvas = document.createElement("canvas");
-        const ctx = canvas.getContext("2d");
         canvas.width = viewport.width;
         canvas.height = viewport.height;
-        await page.render({ canvasContext: ctx, viewport }).promise;
-        const { data: { text } } = await Tesseract.recognize(canvas, "por", { logger: (m) => console.log(m) });
-        return text;
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+        return (await Tesseract.recognize(canvas, "por")).data.text;
       }
-      // Imagem comum
-      const { data: { text } } = await Tesseract.recognize(file, "por", { logger: (m) => console.log(m) });
-      return text;
+      return (await Tesseract.recognize(file, "por")).data.text;
     }
 
-    /* ---------- fluxo ---------- */
+    // ---------- flow ----------
     $("#scanBtn").addEventListener("click", async () => {
       const idFile = $("#idFile").files[0];
       const addrFile = $("#addressFile").files[0];
-      if (!idFile) return alert("Selecione o documento de identidade.");
-      if (!addrFile) return alert("Selecione o comprovante de residência.");
+      if (!idFile || !addrFile) return alert("Selecione ambos os arquivos antes de continuar.");
 
       hide("step1"); show("step2");
       try {
-        // OCR identidade
         const idText = await ocrFile(idFile);
         $("#rawTextId").textContent = idText;
         const idData = parseIdText(idText);
-        for (const [k, v] of Object.entries(idData)) {
-          if (v) $("#identityForm").elements[k].value = v;
-        }
+        Object.entries(idData).forEach(([k,v]) => v && ($("#identityForm").elements[k].value = v));
 
-        // OCR endereço
         const addrText = await ocrFile(addrFile);
         $("#rawTextAddr").textContent = addrText;
         const addrData = parseAddressText(addrText);
-        if (addrData.endereco) $("#addressForm").elements["endereco"].value = addrData.endereco;
+        addrData.endereco && ($("#addressForm").elements.endereco.value = addrData.endereco);
 
         hide("step2"); show("step3");
-      } catch (err) {
-        console.error(err);
-        alert("Falha ao ler arquivos. Tente novamente.");
+      } catch (e) {
+        console.error(e);
+        alert("Erro no processamento OCR. Veja o console para detalhes.");
         hide("step2"); show("step1");
       }
     });
 
-    $("#nextToAddress").addEventListener("click", () => {
-      hide("step3"); show("step4");
-    });
-
-    $("#sendBtn").addEventListener("click", () => {
-      hide("step4"); show("step5");
-    });
+    $("#nextToAddress").addEventListener("click", () => { hide("step3"); show("step4"); });
+    $("#sendBtn").addEventListener("click", () => { hide("step4"); show("step5"); });
   </script>
 </body>
 </html>
+
